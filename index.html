@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from 'firebase/auth';
-import { getFirestore, collection, doc, setDoc, addDoc, onSnapshot, updateDoc, deleteDoc } from 'firebase/firestore';
+import { getFirestore, collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { 
   Calendar, MapPin, Users, CheckCircle, Clock, XCircle, Settings, 
   User, Mail, Phone, Heart, ChevronRight, Plus, Trash2, 
   Image as ImageIcon, Link as LinkIcon, Sparkles, PartyPopper, Cake, CreditCard, Map as MapIcon,
-  MessageCircle, PhoneCall, HelpCircle, BookOpen, ArrowRight, Info
+  MessageCircle, PhoneCall, HelpCircle, BookOpen, AlertCircle, Info
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
@@ -16,8 +16,8 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'linkparty-v3-final';
 
+// 定数
 const FALLBACK_IMAGE = "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?q=80&w=800&auto=format&fit=crop";
-
 const IMAGE_PRESETS = [
   { name: 'カフェ', url: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=800&auto=format&fit=crop' },
   { name: 'イタリアン', url: 'https://images.unsplash.com/photo-1559339352-11d035aa65de?q=80&w=800&auto=format&fit=crop' },
@@ -25,7 +25,6 @@ const IMAGE_PRESETS = [
   { name: 'ラウンジ', url: 'https://images.unsplash.com/photo-1560624052-449f5ddf0c31?q=80&w=800&auto=format&fit=crop' },
   { name: 'アウトドア', url: 'https://images.unsplash.com/photo-1533174072545-7a4b6ad7a6c3?q=80&w=800&auto=format&fit=crop' }
 ];
-
 const JAPANESE_AVATARS = [
   "https://images.unsplash.com/photo-1530268729831-4b0b9e170218?q=80&w=100&h=100&auto=format&fit=crop",
   "https://images.unsplash.com/photo-1548142813-c348350df52b?q=80&w=100&h=100&auto=format&fit=crop",
@@ -38,49 +37,37 @@ const App = () => {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [showAdminEntry, setShowAdminEntry] = useState(false); 
-  const [view, setView] = useState('list'); 
+  const [showAdminEntry, setShowAdminEntry] = useState(false);
+  const [view, setView] = useState('list'); // list, apply, success, guide, faq, admin-add
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [formData, setFormData] = useState({ 
-    name: '', email: '', phone: '', gender: 'male', age: '', guestCount: 1 
-  });
-
+  const [formData, setFormData] = useState({ name: '', email: '', gender: 'male', age: '', guestCount: 1 });
   const [newEvent, setNewEvent] = useState({
-    title: '', date: '', time: '', location: '', description: '',
-    priceMale: 6000, priceFemale: 2000,
-    capacityMale: 10, capacityFemale: 10, currentMale: 0, currentFemale: 0,
-    image: IMAGE_PRESETS[0].url,
-    mapUrl: "" 
+    title: '', date: '', time: '', location: '', priceMale: 6000, priceFemale: 2000,
+    capacityMale: 10, capacityFemale: 10, image: IMAGE_PRESETS[0].url, mapUrl: ""
   });
 
-  // 連絡先情報
   const contactInfo = {
     email: "info@venus-engage.cob",
     phone: "08030092986",
-    lineUrl: "https://line.me/R/ti/p/@your_line_id" // ここにご自身のLINE公式アカウントのURLを入れてください
-  };
-
-  const handleImgError = (e) => {
-    e.target.src = FALLBACK_IMAGE;
+    lineUrl: "https://line.me/R/ti/p/@your_line_id" 
   };
 
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) { setError("認証に失敗しました。"); }
     };
     initAuth();
     const unsubscribe = onAuthStateChanged(auth, setUser);
-
     const params = new URLSearchParams(window.location.search);
-    if (params.get('admin') === 'secret') {
-      setShowAdminEntry(true);
-    }
-
+    if (params.get('admin') === 'secret') setShowAdminEntry(true);
     return () => unsubscribe();
   }, []);
 
@@ -88,14 +75,11 @@ const App = () => {
     if (!user) return;
     const q = collection(db, 'artifacts', appId, 'public', 'data', 'events');
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      const eventData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      eventData.sort((a, b) => new Date(a.date) - new Date(b.date));
-      setEvents(eventData);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      data.sort((a, b) => new Date(a.date) - new Date(b.date));
+      setEvents(data);
       setLoading(false);
-    }, (error) => {
-      console.error("Firestore error:", error);
-      setLoading(false);
-    });
+    }, (err) => { setError("データの読み込みに失敗しました。"); setLoading(false); });
     return () => unsubscribe();
   }, [user]);
 
@@ -103,19 +87,9 @@ const App = () => {
     e.preventDefault();
     if (!user) return;
     try {
-      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), {
-        ...newEvent,
-        status: 'open',
-        createdAt: new Date().toISOString()
-      });
+      await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'events'), { ...newEvent, status: 'open', currentMale: 0, currentFemale: 0, createdAt: new Date().toISOString() });
       setView('list');
-      setNewEvent({ ...newEvent, title: '', date: '', time: '', location: '', mapUrl: '' });
-    } catch (err) { console.error(err); }
-  };
-
-  const deleteEvent = async (id) => {
-    if (!window.confirm("このイベントを完全に削除してもよろしいですか？")) return;
-    await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', id));
+    } catch (err) { alert("追加に失敗しました。"); }
   };
 
   const getEventStatus = (event) => {
@@ -126,216 +100,177 @@ const App = () => {
     return '募集中';
   };
 
-  const changeView = (newView) => {
-    setView(newView);
-    window.scrollTo(0, 0);
-  };
-
-  if (loading) return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-white">
-      <Heart className="text-pink-500 animate-pulse mb-4" size={48} />
-      <p className="text-slate-400 font-bold animate-pulse tracking-widest uppercase">LINKParty Loading...</p>
-    </div>
-  );
+  if (loading) return <div className="min-h-screen flex items-center justify-center font-bold text-pink-500 animate-pulse">LINKParty Loading...</div>;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-20">
-      <nav className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-slate-100">
-        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2 cursor-pointer group" onClick={() => changeView('list')}>
-            <div className="bg-gradient-to-tr from-pink-500 to-rose-400 p-1.5 rounded-lg shadow-lg shadow-pink-100 group-hover:rotate-12 transition-transform">
-              <Heart className="text-white fill-current" size={20} />
-            </div>
-            <h1 className="text-2xl font-black tracking-tighter text-slate-900 italic">LINK<span className="text-pink-500 not-italic">Party</span></h1>
-          </div>
-          <div className="flex items-center gap-3">
-            {isAdmin && (
-              <button onClick={() => changeView('admin-add')} className="hidden sm:flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-800 transition-all shadow-lg">
-                <Plus size={18} /> 追加
-              </button>
-            )}
-            {showAdminEntry && (
-              <button onClick={() => setIsAdmin(!isAdmin)} className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest uppercase transition-all ${isAdmin ? 'bg-pink-600 text-white shadow-md' : 'bg-slate-100 text-slate-500'}`}>
-                <Settings size={12} /> {isAdmin ? '管理者' : '管理者ログイン'}
-              </button>
-            )}
-          </div>
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-10">
+      {/* ナビゲーション */}
+      <nav className="bg-white/90 backdrop-blur-md sticky top-0 z-50 border-b border-slate-100 px-4 h-16 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setView('list')}>
+          <div className="bg-pink-500 p-1.5 rounded-lg shadow-lg rotate-3"><Heart className="text-white fill-current" size={18} /></div>
+          <h1 className="text-xl font-black italic tracking-tighter">LINK<span className="text-pink-500 not-italic">Party</span></h1>
+        </div>
+        <div className="flex items-center gap-2">
+          {isAdmin && view === 'list' && (
+            <button onClick={() => setView('admin-add')} className="bg-slate-900 text-white px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1 shadow-md hover:bg-black transition-all">
+              <Plus size={14} /> 追加
+            </button>
+          )}
+          {showAdminEntry && (
+            <button onClick={() => setIsAdmin(!isAdmin)} className={`px-3 py-1.5 rounded-full text-[10px] font-bold tracking-widest transition-all ${isAdmin ? 'bg-pink-600 text-white' : 'bg-slate-100 text-slate-400 hover:text-slate-600'}`}>
+              <Settings size={12} className="inline mr-1" /> {isAdmin ? '管理終了' : '管理者モード'}
+            </button>
+          )}
         </div>
       </nav>
 
       <main>
         {view === 'list' && (
           <>
-            <section className="relative overflow-hidden bg-white pt-16 pb-24 px-4 text-balance">
-              <div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-pink-50 rounded-full blur-3xl opacity-50"></div>
-              <div className="max-w-4xl mx-auto text-center relative z-10">
-                <div className="inline-flex items-center gap-2 px-4 py-2 bg-pink-50 text-pink-600 rounded-full text-xs font-black mb-8 animate-bounce tracking-widest">
-                  <Sparkles size={14} /> 最高の出会いを、ここから。
+            {/* ヒーロー */}
+            <section className="bg-white pt-16 pb-24 px-4 text-center relative overflow-hidden">
+              <div className="absolute top-0 right-0 w-80 h-80 bg-pink-50/50 rounded-full blur-3xl -mr-40 -mt-40"></div>
+              <div className="max-w-4xl mx-auto relative z-10">
+                <div className="inline-flex items-center gap-2 px-4 py-2 bg-pink-50 text-pink-600 rounded-full text-xs font-black mb-6 tracking-widest animate-bounce uppercase">
+                  <Sparkles size={14} /> New Life, New Connection
                 </div>
-                <h2 className="text-5xl md:text-7xl font-black text-slate-900 leading-[1.1] mb-8 tracking-tight">
+                <h2 className="text-4xl md:text-6xl font-black text-slate-900 leading-tight mb-6">
                   繋がる。楽しむ。<br />
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 via-rose-500 to-indigo-600">理想の恋活、見つけよう。</span>
                 </h2>
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-6 mt-16">
-                  <div className="flex -space-x-4">
-                    {JAPANESE_AVATARS.map((url, i) => (
-                      <img key={i} className="w-12 h-12 rounded-full border-4 border-white shadow-md object-cover" src={url} alt="" onError={handleImgError} />
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mt-12">
+                  <div className="flex -space-x-3">
+                    {JAPANESE_AVATARS.map((u, i) => (
+                      <img key={i} className="w-10 h-10 rounded-full border-4 border-white object-cover shadow-sm" src={u} alt="" />
                     ))}
-                    <div className="w-12 h-12 rounded-full border-4 border-white bg-slate-900 flex items-center justify-center text-[10px] font-black text-white shadow-md">99+</div>
+                    <div className="w-10 h-10 rounded-full border-4 border-white bg-slate-900 flex items-center justify-center text-[10px] font-bold text-white">99+</div>
                   </div>
-                  <p className="text-sm font-bold text-slate-400 tracking-tight">今週だけで<span className="text-pink-500 text-2xl mx-1 font-black underline decoration-pink-100 underline-offset-8">150名</span>以上が参加予約中！</p>
+                  <p className="text-sm font-bold text-slate-400">今週だけで150名以上が参加予約中！</p>
                 </div>
               </div>
             </section>
 
-            <section className="max-w-6xl mx-auto px-4 -mt-10 relative z-20">
-              <div className="flex items-center justify-between mb-10 px-2">
-                <h3 className="text-2xl font-black flex items-center gap-2 tracking-tight">
-                  <PartyPopper className="text-pink-500" size={28} /> 開催予定のイベント
-                </h3>
-              </div>
-
+            {/* 一覧 */}
+            <section className="max-w-6xl mx-auto px-4 -mt-10 relative z-20 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {events.length === 0 ? (
-                <div className="text-center py-24 bg-white rounded-[3rem] border-2 border-dashed border-slate-200 shadow-sm flex flex-col items-center text-balance">
-                  <ImageIcon size={48} className="text-slate-100 mb-4" />
-                  <p className="text-slate-400 font-bold text-wrap">現在、掲載準備中のイベントのみです。</p>
-                </div>
+                <div className="col-span-full py-20 bg-white rounded-3xl border-2 border-dashed border-slate-200 text-center text-slate-400 font-bold">掲載準備中のイベントのみです。</div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10">
-                  {events.map(event => {
-                    const status = getEventStatus(event);
-                    const isClosed = status !== '募集中';
-                    return (
-                      <div key={event.id} className={`group bg-white rounded-[2.5rem] overflow-hidden shadow-2xl shadow-slate-200/50 border border-slate-100 flex flex-col transition-all duration-500 hover:-translate-y-3 ${isClosed ? 'opacity-75 grayscale-[0.2]' : ''}`}>
-                        <div className="relative h-60 overflow-hidden">
-                          <img src={event.image || FALLBACK_IMAGE} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt="" onError={handleImgError} />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
-                          <div className="absolute top-5 left-5">
-                            <span className={`px-5 py-2 rounded-full text-[10px] font-black tracking-[0.2em] shadow-xl uppercase ${
-                              status === '募集中' ? 'bg-white text-pink-600' : 'bg-slate-800 text-white'
-                            }`}>
-                              {status}
-                            </span>
-                          </div>
-                          {isAdmin && (
-                            <button onClick={() => deleteEvent(event.id)} className="absolute top-5 right-5 p-3 bg-white/90 rounded-full text-red-600 hover:bg-white shadow-xl">
-                              <Trash2 size={16} />
-                            </button>
-                          )}
-                          <div className="absolute bottom-6 left-6 right-6 text-white text-balance">
-                            <div className="flex items-center gap-2 text-[10px] font-black mb-2 tracking-[0.2em] opacity-90 uppercase">
-                              <Calendar size={12} /> {event.date.replace(/-/g, '/')} <Clock size={12} className="ml-2" /> {event.time}
-                            </div>
-                            <h4 className="font-black text-xl leading-tight line-clamp-2">{event.title}</h4>
-                          </div>
-                        </div>
-                        <div className="p-8 flex flex-col flex-1">
-                          <div className="space-y-5 mb-10 flex-1">
-                            <div className="flex items-start gap-4 text-slate-500">
-                              <MapPin size={20} className="text-pink-400 shrink-0 mt-0.5" />
-                              <span className="text-sm font-bold text-slate-600">{event.location}</span>
-                            </div>
-                            <div className="flex items-start gap-4 text-slate-500">
-                              <CreditCard size={20} className="text-indigo-400 shrink-0 mt-0.5" />
-                              <div className="text-sm font-black tracking-tight text-slate-800">
-                                男: {event.priceMale?.toLocaleString()}円 / 女: {event.priceFemale?.toLocaleString()}円
-                              </div>
-                            </div>
-                          </div>
-                          <button 
-                            disabled={isClosed}
-                            onClick={() => { setSelectedEvent(event); changeView('apply'); }}
-                            className={`w-full py-5 rounded-[1.5rem] font-black text-sm uppercase tracking-[0.2em] flex items-center justify-center gap-3 transition-all ${
-                              isClosed ? 'bg-slate-100 text-slate-400' : 'bg-slate-900 text-white hover:bg-pink-600 shadow-2xl hover:shadow-pink-200'
-                            }`}
-                          >
-                            {isClosed ? 'Closed' : '今すぐ予約'} {!isClosed && <ChevronRight size={18} />}
-                          </button>
+                events.map(event => {
+                  const status = getEventStatus(event);
+                  const isClosed = status !== '募集中';
+                  return (
+                    <div key={event.id} className={`group bg-white rounded-[2rem] overflow-hidden shadow-xl border border-slate-100 flex flex-col transition-all hover:-translate-y-2 ${isClosed ? 'opacity-75 grayscale-[0.2]' : ''}`}>
+                      <div className="relative h-52 overflow-hidden">
+                        <img src={event.image || FALLBACK_IMAGE} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" alt="" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+                        <div className="absolute top-4 left-4 bg-white/95 text-pink-600 px-4 py-1.5 rounded-full text-[10px] font-black tracking-widest uppercase shadow-lg">{status}</div>
+                        {isAdmin && (
+                          <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'events', event.id))} className="absolute top-4 right-4 p-2 bg-red-500 text-white rounded-full shadow-lg"><Trash2 size={14} /></button>
+                        )}
+                        <div className="absolute bottom-4 left-4 right-4 text-white">
+                          <p className="text-[10px] font-bold opacity-90 uppercase tracking-widest mb-1">{event.date.replace(/-/g, '/')} {event.time}</p>
+                          <h4 className="font-black text-lg line-clamp-1">{event.title}</h4>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
+                      <div className="p-6 flex flex-col flex-1">
+                        <div className="space-y-3 mb-8 flex-1">
+                          <div className="flex items-start gap-2 text-slate-500 text-sm font-medium"><MapPin size={16} className="text-pink-400 mt-0.5 shrink-0" /> {event.location}</div>
+                          <div className="flex items-center gap-2 text-slate-500 text-sm font-black"><CreditCard size={16} className="text-indigo-400 shrink-0" /> 男: {event.priceMale?.toLocaleString()}円 / 女: {event.priceFemale?.toLocaleString()}円</div>
+                        </div>
+                        <button disabled={isClosed} onClick={() => { setSelectedEvent(event); setView('apply'); window.scrollTo(0,0); }} className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest shadow-lg transition-all ${isClosed ? 'bg-slate-100 text-slate-400' : 'bg-slate-900 text-white hover:bg-pink-600 shadow-pink-100'}`}>
+                          {isClosed ? 'Closed' : '今すぐ予約'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
               )}
             </section>
 
-            <section className="max-w-6xl mx-auto px-4 mt-24 mb-12 text-balance">
-              <div className="bg-gradient-to-br from-white to-slate-50 rounded-[3rem] p-10 md:p-16 shadow-xl border border-white flex flex-col md:flex-row items-center justify-between gap-12 relative overflow-hidden">
-                <div className="absolute top-0 left-0 w-64 h-64 bg-pink-100/30 rounded-full blur-3xl -ml-32 -mt-32"></div>
-                <div className="relative z-10 md:max-w-md">
-                  <h3 className="text-3xl font-black text-slate-900 mb-4 tracking-tight">お問い合わせ</h3>
-                  <p className="text-slate-500 font-medium leading-relaxed mb-8">
-                    イベントに関するご質問など、お気軽にお問い合わせください。運営スタッフが丁寧に対応いたします。
-                  </p>
-                  <div className="space-y-4 text-wrap">
-                    <a href={`tel:${contactInfo.phone}`} className="flex items-center gap-4 group">
-                      <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-lg group-hover:scale-110 transition-transform">
-                        <PhoneCall size={20} />
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Phone</p>
-                        <p className="text-lg font-black text-slate-800 group-hover:text-indigo-600 transition-colors">{contactInfo.phone}</p>
-                      </div>
-                    </a>
-                    <a href={`mailto:${contactInfo.email}`} className="flex items-center gap-4 group">
-                      <div className="bg-pink-500 p-3 rounded-2xl text-white shadow-lg group-hover:scale-110 transition-transform">
-                        <Mail size={20} />
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Email</p>
-                        <p className="text-lg font-black text-slate-800 group-hover:text-pink-500 transition-colors">{contactInfo.email}</p>
-                      </div>
-                    </a>
-                  </div>
+            {/* お問い合わせ */}
+            <section className="max-w-4xl mx-auto px-4 mt-24">
+              <div className="bg-gradient-to-br from-indigo-900 to-slate-900 rounded-[3rem] p-10 md:p-16 text-white text-center relative overflow-hidden">
+                <div className="absolute top-0 right-0 opacity-10 -mr-10 -mt-10"><PartyPopper size={200} /></div>
+                <h3 className="text-3xl font-black mb-6">お問い合わせ</h3>
+                <p className="opacity-80 mb-10 text-sm max-w-md mx-auto">ご不明な点は、メール・お電話・LINEにてお気軽にお問い合わせください。</p>
+                <div className="flex flex-wrap justify-center gap-8 mb-10">
+                  <div className="flex flex-col items-center gap-2"><Phone className="text-pink-400" /> <span className="font-black text-xl tracking-widest">{contactInfo.phone}</span></div>
+                  <div className="flex flex-col items-center gap-2"><Mail className="text-pink-400" /> <span className="font-bold">{contactInfo.email}</span></div>
                 </div>
-                <div className="relative z-10 w-full md:w-auto flex-shrink-0 text-center bg-white p-8 rounded-[2rem] shadow-2xl border border-slate-50">
-                  <MessageCircle size={48} className="text-indigo-500 mb-4 mx-auto animate-pulse" />
-                  <p className="text-sm font-black text-slate-900 mb-2 tracking-tighter">LINEで相談も可能です</p>
-                  <p className="text-[10px] text-slate-400 font-bold mb-6">平日 10:00 - 19:00 受付中</p>
-                  <a 
-                    href={contactInfo.lineUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-block bg-[#06C755] text-white px-8 py-4 rounded-2xl font-black text-sm tracking-widest hover:brightness-105 shadow-lg shadow-green-100 uppercase"
-                  >
-                    LINE友だち追加
-                  </a>
-                </div>
+                <a href={contactInfo.lineUrl} target="_blank" className="inline-block bg-[#06C755] px-10 py-4 rounded-2xl font-black tracking-widest hover:scale-105 transition-all shadow-xl">LINE友だち追加</a>
               </div>
             </section>
           </>
         )}
 
-        {view === 'guide' && (
-          <div className="max-w-4xl mx-auto px-4 py-16 text-balance">
-            <button onClick={() => changeView('list')} className="mb-8 flex items-center gap-2 text-sm font-black text-slate-400 hover:text-pink-500 transition-colors uppercase tracking-[0.2em]">
-              ← イベント一覧に戻る
-            </button>
-            <div className="bg-white rounded-[3rem] shadow-2xl p-10 md:p-16 border border-slate-100">
-              <div className="flex items-center gap-4 mb-10">
-                <div className="bg-pink-500 p-3 rounded-2xl text-white shadow-lg shadow-pink-100">
-                  <BookOpen size={32} />
+        {view === 'apply' && selectedEvent && (
+          <div className="max-w-6xl mx-auto px-4 py-12 grid grid-cols-1 lg:grid-cols-3 gap-10">
+            <div className="lg:col-span-2">
+              <button onClick={() => setView('list')} className="mb-6 font-bold text-slate-400 hover:text-pink-500 uppercase tracking-widest">← 戻る</button>
+              <div className="bg-white rounded-[2.5rem] shadow-2xl p-8 sm:p-12 border border-slate-100">
+                <div className="mb-10">
+                  <span className="bg-pink-50 text-pink-600 px-4 py-1 rounded-full text-[10px] font-black tracking-widest uppercase mb-4 inline-block">Reservation</span>
+                  <h2 className="text-3xl font-black text-slate-900 mb-6">{selectedEvent.title}</h2>
+                  <div className="flex flex-wrap gap-4 text-sm font-black">
+                    <div className="bg-slate-50 px-4 py-2 rounded-xl">男性: {selectedEvent.priceMale?.toLocaleString()}円</div>
+                    <div className="bg-pink-50 px-4 py-2 rounded-xl text-pink-600">女性: {selectedEvent.priceFemale?.toLocaleString()}円</div>
+                  </div>
                 </div>
-                <h2 className="text-3xl md:text-4xl font-black tracking-tight text-wrap">ご利用ガイド</h2>
-              </div>
-              
-              <div className="space-y-12">
-                {[
-                  { title: "イベントを探して予約", desc: "一覧から気になるイベントを選び、「今すぐ予約」ボタンからお申し込みください。参加人数や性別などの情報を入力します。", icon: <Calendar className="text-indigo-500" /> },
-                  { title: "予約完了メールを確認", desc: "申し込み完了後、数分以内に運営から確認メールが届きます。開催場所の詳細や当日の受付方法が記載されています。", icon: <Mail className="text-pink-500" /> },
-                  { title: "当日、会場で受付・お支払い", desc: "イベント開始の15分前から受付を開始します。会場のLINKParty受付カウンターへお越しください。身分証をご提示いただき、参加費（現金のみ）をお支払いください。", icon: <MapPin className="text-indigo-500" /> },
-                  { title: "パーティー開始！", desc: "スタッフが丁寧に席へご案内し、イベントがスタートします。プロフィールカードなどを使って、楽しい時間をお過ごしください。", icon: <PartyPopper className="text-pink-500" /> }
-                ].map((step, idx) => (
-                  <div key={idx} className="flex gap-6 items-start relative group">
-                    <div className="flex-shrink-0 w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center font-black text-slate-300 text-2xl group-hover:text-pink-500 transition-colors shadow-sm">
-                      {idx + 1}
-                    </div>
+                <form onSubmit={(e) => { e.preventDefault(); setView('success'); }} className="space-y-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <input required className="w-full px-6 py-5 bg-slate-50 rounded-2xl ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-pink-500 font-bold" placeholder="お名前" />
+                    <input required type="number" min="18" className="w-full px-6 py-5 bg-slate-50 rounded-2xl ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-pink-500 font-bold" placeholder="年齢" />
+                  </div>
+                  <input required type="email" className="w-full px-6 py-5 bg-slate-50 rounded-2xl ring-1 ring-slate-200 outline-none focus:ring-2 focus:ring-pink-500 font-bold" placeholder="メールアドレス" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <select className="w-full px-6 py-5 bg-slate-50 rounded-2xl ring-1 ring-slate-200 font-bold outline-none" value={formData.gender} onChange={(e) => setFormData({...formData, gender: e.target.value})}>
+                      <option value="male">男性として予約</option>
+                      <option value="female">女性として予約</option>
+                    </select>
+                    <select className="w-full px-6 py-5 bg-slate-50 rounded-2xl ring-1 ring-slate-200 font-bold outline-none" value={formData.guestCount} onChange={(e) => setFormData({...formData, guestCount: parseInt(e.target.value)})}>
+                      {[1,2,3,4].map(n => <option key={n} value={n}>{n}名で予約</option>)}
+                    </select>
+                  </div>
+                  <div className="bg-slate-900 rounded-[2rem] p-8 text-white flex flex-col sm:flex-row items-center justify-between gap-6 shadow-2xl">
                     <div>
-                      <h4 className="text-xl font-black mb-2 flex items-center gap-2 text-wrap">
-                        {step.title}
-                      </h4>
-                      <p className="text-slate-500 leading-relaxed font-medium text-wrap">{step.desc}</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Fee (当日支払い)</p>
+                      <p className="text-3xl font-black">
+                        {(formData.gender === 'male' ? selectedEvent.priceMale : selectedEvent.priceFemale) * formData.guestCount}円
+                      </p>
+                      <p className="text-[10px] text-pink-400 font-bold mt-1 uppercase">※当日、会場にて現金払いのみ</p>
                     </div>
+                    <button type="submit" className="w-full sm:w-auto px-12 py-5 bg-gradient-to-r from-pink-500 to-rose-600 text-white font-black rounded-2xl shadow-xl hover:scale-105 active:scale-95 transition-all uppercase tracking-widest">
+                      予約を確定する
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+            <div className="lg:col-span-1 space-y-8">
+              <div className="bg-white p-6 rounded-[2rem] shadow-xl border border-slate-100">
+                <h4 className="font-black text-slate-900 mb-4 flex items-center gap-2"><MapIcon size={18} className="text-indigo-500"/> 開催地アクセス</h4>
+                <div className="h-64 bg-slate-100 rounded-2xl overflow-hidden mb-4 border border-slate-200">
+                  {selectedEvent.mapUrl ? <iframe src={selectedEvent.mapUrl} className="w-full h-full border-0 grayscale hover:grayscale-0 transition-all duration-700" loading="lazy"></iframe> : <div className="h-full flex items-center justify-center text-xs text-slate-400 text-center p-4">住所：{selectedEvent.location}<br/><br/>詳細は予約完了後に送信します。</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {view === 'guide' && (
+          <div className="max-w-4xl mx-auto px-4 py-16">
+            <div className="bg-white rounded-[3rem] shadow-2xl p-10 md:p-16">
+              <h2 className="text-4xl font-black mb-12 tracking-tight">ご利用ガイド</h2>
+              <div className="space-y-10">
+                {[
+                  { t: "イベントを探す", d: "一覧から気になるパーティーを選んで予約画面へ。" },
+                  { t: "予約を確定", d: "メールアドレス等の情報を入力。お支払いは当日です。" },
+                  { t: "当日、会場へ", d: "受付にて身分証を提示し、参加費（現金のみ）をお支払いください。" },
+                  { t: "パーティー開始！", d: "スタッフの誘導で素敵な出会いをお楽しみください。" }
+                ].map((s, i) => (
+                  <div key={i} className="flex gap-6 items-start group">
+                    <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center font-black text-2xl text-slate-300 group-hover:text-pink-500 transition-all shadow-sm shrink-0">{i+1}</div>
+                    <div><h4 className="text-xl font-black mb-2">{s.t}</h4><p className="text-slate-500 font-medium leading-relaxed">{s.d}</p></div>
                   </div>
                 ))}
               </div>
@@ -344,35 +279,19 @@ const App = () => {
         )}
 
         {view === 'faq' && (
-          <div className="max-w-4xl mx-auto px-4 py-16 text-balance">
-            <button onClick={() => changeView('list')} className="mb-8 flex items-center gap-2 text-sm font-black text-slate-400 hover:text-pink-500 transition-colors uppercase tracking-[0.2em]">
-              ← イベント一覧に戻る
-            </button>
-            <div className="bg-white rounded-[3rem] shadow-2xl p-10 md:p-16 border border-slate-100 text-wrap">
-              <div className="flex items-center gap-4 mb-12">
-                <div className="bg-indigo-600 p-3 rounded-2xl text-white shadow-lg shadow-indigo-100">
-                  <HelpCircle size={32} />
-                </div>
-                <h2 className="text-3xl md:text-4xl font-black tracking-tight">よくあるご質問</h2>
-              </div>
-              
+          <div className="max-w-4xl mx-auto px-4 py-16">
+            <div className="bg-white rounded-[3rem] shadow-2xl p-10 md:p-16">
+              <h2 className="text-4xl font-black mb-12 tracking-tight">よくあるご質問</h2>
               <div className="space-y-6">
                 {[
-                  { q: "1人での参加でも大丈夫ですか？", a: "はい、もちろんです。LINKPartyでは全体の約半数の方がお1人様でのご参加です。スタッフがしっかりとサポートいたしますのでご安心ください。" },
-                  { q: "どのような服装で行けばいいですか？", a: "過度にラフな服装（短パン、サンダル等）でなければ問題ありません。清潔感のある「スマートカジュアル」な服装を推奨しております。" },
-                  { q: "支払い方法は何がありますか？", a: "原則として当日、会場受付にて【現金】でお支払いいただきます。お釣りのないようご用意いただけますと幸いです。" },
-                  { q: "キャンセル料はいつから発生しますか？", a: "開催日の2日前からのキャンセルには参加費の50%、前日および当日のキャンセルには100%のキャンセル料が発生いたします。" },
-                  { q: "遅刻しそうな場合はどうすればいいですか？", a: "お問い合わせの電話番号（080-3009-2986）までご連絡ください。途中からの参加も可能ですが、お早めのご連絡をお願いしております。" },
-                  { q: "当日必要な持ち物はありますか？", a: "ご本人確認のための身分証明書（免許証、マイナンバーカード等）を必ずご持参ください。筆記用具などは運営側でご用意しております。" }
-                ].map((item, idx) => (
-                  <div key={idx} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 hover:border-pink-200 transition-all group">
-                    <h4 className="font-black text-lg mb-4 flex items-start gap-3">
-                      <span className="text-pink-500 group-hover:scale-110 transition-transform">Q.</span>
-                      {item.q}
-                    </h4>
-                    <p className="text-slate-500 font-medium leading-relaxed pl-7 border-l-2 border-indigo-100">
-                      {item.a}
-                    </p>
+                  { q: "一人での参加でも大丈夫？", a: "はい、約半数の方がお一人様でのご参加です。スタッフがサポートします。" },
+                  { q: "支払い方法は？", a: "原則、当日受付にて「現金のみ」となります。お釣りのないようご用意いただけますと幸いです。" },
+                  { q: "服装の指定は？", a: "清潔感のあるスマートカジュアルを推奨しております。" },
+                  { q: "キャンセル料は？", a: "開催2日前から50%、当日・前日は100%の料金が発生します。" }
+                ].map((f, i) => (
+                  <div key={i} className="p-6 bg-slate-50 rounded-2xl border border-slate-100 group transition-all hover:border-pink-200">
+                    <h4 className="font-black text-lg mb-3 flex gap-3"><span className="text-pink-500">Q.</span>{f.q}</h4>
+                    <p className="text-slate-500 leading-relaxed font-medium pl-8 border-l-2 border-indigo-100">{f.a}</p>
                   </div>
                 ))}
               </div>
@@ -380,162 +299,23 @@ const App = () => {
           </div>
         )}
 
-        {view === 'apply' && selectedEvent && (
-          <div className="max-w-6xl mx-auto px-4 py-12 grid grid-cols-1 lg:grid-cols-3 gap-10">
-            <div className="lg:col-span-2">
-              <button onClick={() => changeView('list')} className="mb-8 flex items-center gap-3 text-sm font-black text-slate-400 hover:text-pink-500 transition-all uppercase tracking-[0.2em] group">
-                <span className="group-hover:-translate-x-1 transition-transform">←</span> イベント一覧に戻る
-              </button>
-              
-              <div className="bg-white rounded-[3rem] shadow-2xl overflow-hidden border border-slate-100 p-8 sm:p-16">
-                <div className="mb-12 text-balance">
-                  <div className="inline-block bg-pink-50 text-pink-600 px-5 py-2 rounded-full text-[10px] font-black tracking-[0.3em] uppercase mb-6">Reservation Form</div>
-                  <h2 className="text-3xl sm:text-4xl font-black text-slate-900 mb-8 leading-tight">{selectedEvent.title}</h2>
-                  <div className="flex flex-wrap gap-5">
-                    <div className="flex flex-col bg-slate-50 px-6 py-4 rounded-[1.5rem] border border-slate-100 min-w-[140px] shadow-sm">
-                      <span className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mb-1 text-wrap">男性 参加費</span>
-                      <span className="text-xl font-black text-slate-900">{selectedEvent.priceMale?.toLocaleString()}円</span>
-                    </div>
-                    <div className="flex flex-col bg-pink-50/30 px-6 py-4 rounded-[1.5rem] border border-pink-100 min-w-[140px] shadow-sm">
-                      <span className="text-[10px] text-pink-400 font-black uppercase tracking-[0.2em] mb-1 text-wrap">女性 参加費</span>
-                      <span className="text-xl font-black text-pink-600">{selectedEvent.priceFemale?.toLocaleString()}円</span>
-                    </div>
-                  </div>
-                </div>
-
-                <form onSubmit={(e) => { e.preventDefault(); changeView('success'); }} className="space-y-8 text-balance">
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-                    <div className="space-y-3">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-2">お名前</label>
-                      <input required className="w-full px-6 py-5 bg-slate-50 rounded-2xl border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-pink-500 outline-none transition-all font-bold text-slate-800" placeholder="田中 太郎" />
-                    </div>
-                    <div className="space-y-3">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-2">年齢</label>
-                      <div className="relative">
-                        <Cake className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-                        <input required type="number" min="18" className="w-full pl-14 pr-6 py-5 bg-slate-50 rounded-2xl border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-pink-500 outline-none transition-all font-bold text-slate-800" placeholder="25" />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-2">メールアドレス</label>
-                    <input required type="email" className="w-full px-6 py-5 bg-slate-50 rounded-2xl border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-pink-500 outline-none transition-all font-bold text-slate-800" placeholder="contact@example.com" />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 text-wrap">
-                    <div className="space-y-3">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-2">性別</label>
-                      <select 
-                        className="w-full px-6 py-5 bg-slate-50 rounded-2xl border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-pink-500 outline-none transition-all font-black text-slate-700 appearance-none shadow-sm"
-                        value={formData.gender}
-                        onChange={(e) => setFormData({...formData, gender: e.target.value})}
-                      >
-                        <option value="male">男性として予約</option>
-                        <option value="female">女性として予約</option>
-                      </select>
-                    </div>
-                    <div className="space-y-3">
-                      <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] ml-2">参加人数</label>
-                      <select 
-                        className="w-full px-6 py-5 bg-slate-50 rounded-2xl border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-pink-500 outline-none transition-all font-black text-slate-700 appearance-none shadow-sm"
-                        value={formData.guestCount}
-                        onChange={(e) => setFormData({...formData, guestCount: parseInt(e.target.value)})}
-                      >
-                        {[1,2,3,4].map(n => <option key={n} value={n}>{n}名で予約</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-900 rounded-[2rem] p-8 sm:p-10 text-white flex flex-col sm:flex-row items-center justify-between gap-8 shadow-2xl mt-12 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-pink-500/10 rounded-full -mr-16 -mt-16 blur-2xl text-wrap"></div>
-                    <div className="flex items-center gap-5 relative z-10 text-wrap">
-                      <div className="bg-white/10 p-4 rounded-full shadow-inner"><CreditCard className="text-pink-400" size={28} /></div>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-1">Total Fee</p>
-                        <p className="text-3xl font-black tracking-tighter">
-                          {formData.gender === 'male' 
-                            ? (selectedEvent.priceMale * formData.guestCount).toLocaleString() 
-                            : (selectedEvent.priceFemale * formData.guestCount).toLocaleString()}円
-                          <span className="text-sm font-normal text-slate-500 ml-2 tracking-normal">(税込)</span>
-                        </p>
-                        <p className="text-[10px] text-pink-400 font-bold uppercase mt-1">※当日、会場にて現金でお支払いください</p>
-                      </div>
-                    </div>
-                    <button type="submit" className="w-full sm:w-auto px-12 py-5 bg-gradient-to-r from-pink-500 to-rose-600 text-white font-black rounded-2xl shadow-xl hover:scale-[1.05] active:scale-[0.98] transition-all uppercase tracking-[0.2em] relative z-10 text-wrap">
-                      予約を確定する
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
-
-            <div className="lg:col-span-1 space-y-10 text-wrap">
-              <div className="bg-white rounded-[2.5rem] shadow-xl border border-slate-100 p-8 text-wrap">
-                <h4 className="font-black text-slate-900 mb-6 flex items-center gap-3 tracking-tight">
-                  <MapIcon className="text-indigo-500" size={20} /> 開催地アクセス
-                </h4>
-                <div className="w-full h-72 bg-slate-100 rounded-[1.5rem] overflow-hidden mb-6 border border-slate-200 shadow-inner group relative">
-                  {selectedEvent.mapUrl ? (
-                    <iframe 
-                      src={selectedEvent.mapUrl} 
-                      className="w-full h-full border-0 grayscale hover:grayscale-0 transition-all duration-1000" 
-                      allowFullScreen="" 
-                      loading="lazy"
-                    ></iframe>
-                  ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-300 p-10 text-center">
-                      <MapPin size={40} className="mb-4 opacity-10" />
-                      <p className="text-xs font-black leading-relaxed tracking-widest uppercase text-balance">Venue details will be sent<br />after reservation.</p>
-                    </div>
-                  )}
-                </div>
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                  <p className="text-xs font-bold text-slate-700 leading-relaxed">{selectedEvent.location}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {view === 'admin-add' && (
-          <div className="max-w-2xl mx-auto px-4 py-12">
-            <div className="bg-white p-10 sm:p-16 rounded-[3.5rem] shadow-2xl border border-slate-100">
-              <h2 className="text-3xl font-black mb-12 flex items-center gap-4 text-slate-900 tracking-tight">
-                <Plus className="text-pink-500" /> イベント新規作成
-              </h2>
-              <form onSubmit={handleAddEvent} className="space-y-8 text-wrap">
-                <div className="bg-slate-50 p-8 rounded-[2rem] border-2 border-dashed border-slate-200 mb-10 text-wrap">
-                  <label className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] mb-6 block ml-2">メイン画像の選択</label>
-                  <div className="grid grid-cols-5 gap-4 mb-6">
-                    {IMAGE_PRESETS.map(preset => (
-                      <button 
-                        key={preset.name} type="button" 
-                        onClick={() => setNewEvent({...newEvent, image: preset.url})}
-                        className={`aspect-square rounded-[1rem] overflow-hidden border-4 transition-all ${newEvent.image === preset.url ? 'border-pink-500 scale-110 shadow-2xl' : 'border-transparent opacity-40 hover:opacity-100'}`}
-                      >
-                        <img src={preset.url} className="w-full h-full object-cover" alt="" onError={handleImgError} />
-                      </button>
-                    ))}
-                  </div>
+          <div className="max-w-2xl mx-auto px-4 py-16">
+            <div className="bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100">
+              <h2 className="text-3xl font-black mb-10 flex items-center gap-2"><Plus className="text-pink-500" /> 新規作成</h2>
+              <form onSubmit={handleAddEvent} className="space-y-6">
+                <input required className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none font-bold" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} placeholder="イベント名" />
+                <div className="grid grid-cols-2 gap-4">
+                  <input required type="date" className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} />
+                  <input required className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none" value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})} placeholder="14:00 - 16:00" />
                 </div>
-
-                <div className="space-y-6">
-                  <input required className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 focus:ring-2 focus:ring-pink-500 font-bold" value={newEvent.title} onChange={e => setNewEvent({...newEvent, title: e.target.value})} placeholder="イベント名" />
-                  <div className="grid grid-cols-2 gap-6">
-                    <input required type="date" className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-bold" value={newEvent.date} onChange={e => setNewEvent({...newEvent, date: e.target.value})} />
-                    <input required className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-bold" value={newEvent.time} onChange={e => setNewEvent({...newEvent, time: e.target.value})} placeholder="時間帯" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-6 text-wrap">
-                    <input type="number" className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-bold" value={newEvent.priceMale} onChange={e => setNewEvent({...newEvent, priceMale: parseInt(e.target.value)})} placeholder="男性料金" />
-                    <input type="number" className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-bold" value={newEvent.priceFemale} onChange={e => setNewEvent({...newEvent, priceFemale: parseInt(e.target.value)})} placeholder="女性料金" />
-                  </div>
-                  <input required className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-bold" value={newEvent.location} onChange={e => setNewEvent({...newEvent, location: e.target.value})} placeholder="場所" />
-                  <input className="w-full px-6 py-4 bg-slate-50 rounded-2xl outline-none ring-1 ring-slate-200 font-mono text-[10px]" value={newEvent.mapUrl} onChange={e => setNewEvent({...newEvent, mapUrl: e.target.value})} placeholder="Map URL (Google Map Embed URL)" />
+                <div className="grid grid-cols-2 gap-4 text-xs font-black uppercase text-slate-400">
+                  <div className="space-y-2 ml-2">男性料金 (円)<input type="number" className="w-full px-6 py-4 bg-slate-50 rounded-2xl text-slate-800 outline-none" value={newEvent.priceMale} onChange={e => setNewEvent({...newEvent, priceMale: parseInt(e.target.value)})} /></div>
+                  <div className="space-y-2 ml-2">女性料金 (円)<input type="number" className="w-full px-6 py-4 bg-slate-50 rounded-2xl text-slate-800 outline-none" value={newEvent.priceFemale} onChange={e => setNewEvent({...newEvent, priceFemale: parseInt(e.target.value)})} /></div>
                 </div>
-
-                <div className="flex gap-6 pt-10 text-wrap">
-                  <button type="button" onClick={() => changeView('list')} className="flex-1 py-5 font-black text-slate-400">キャンセル</button>
+                <input required className="w-full px-6 py-5 bg-slate-50 rounded-2xl outline-none" value={newEvent.location} onChange={e => setNewEvent({...newEvent, location: e.target.value})} placeholder="場所" />
+                <div className="flex gap-4 pt-6">
+                  <button type="button" onClick={() => setView('list')} className="flex-1 py-5 font-bold text-slate-400">戻る</button>
                   <button type="submit" className="flex-[2] py-5 bg-slate-900 text-white font-black rounded-2xl shadow-xl uppercase tracking-widest">公開する</button>
                 </div>
               </form>
@@ -544,64 +324,33 @@ const App = () => {
         )}
 
         {view === 'success' && (
-          <div className="max-w-xl mx-auto px-4 py-24 text-center text-wrap">
-            <div className="w-32 h-32 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-10 animate-bounce shadow-xl border border-green-100">
-              <CheckCircle size={64} />
-            </div>
-            <h2 className="text-4xl font-black text-slate-900 mb-6 uppercase tracking-tight leading-tight">Success!</h2>
-            <p className="text-slate-500 font-bold mb-12 text-lg text-wrap">
-              ご予約ありがとうございました！<br />
-              詳細メールをお送りしましたので、<br className="sm:hidden" />当日まで大切に保管してください。
-            </p>
-            <button onClick={() => changeView('list')} className="w-full py-6 bg-slate-900 text-white rounded-[2rem] font-black shadow-2xl tracking-[0.3em] uppercase">Return Home</button>
+          <div className="max-w-xl mx-auto px-4 py-24 text-center">
+            <div className="w-24 h-24 bg-green-50 text-green-500 rounded-full flex items-center justify-center mx-auto mb-10 animate-bounce shadow-xl border border-green-100"><CheckCircle size={48} /></div>
+            <h2 className="text-4xl font-black text-slate-900 mb-6 uppercase tracking-tighter">Success!</h2>
+            <p className="text-slate-500 font-bold mb-12 text-lg">ご予約ありがとうございました！<br />詳細メールをご確認ください。</p>
+            <button onClick={() => setView('list')} className="w-full py-6 bg-slate-900 text-white rounded-[2rem] font-black shadow-2xl tracking-[0.2em] uppercase transition-all hover:scale-105">Return to Home</button>
           </div>
         )}
       </main>
 
-      <footer className="bg-white border-t border-slate-100 pt-20 pb-10 text-wrap">
-        <div className="max-w-6xl mx-auto px-4 text-wrap">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12 mb-16 text-center md:text-left text-balance text-wrap">
-            <div className="space-y-6 flex flex-col items-center md:items-start text-wrap">
-              <div className="flex items-center gap-2">
-                <div className="bg-slate-900 p-2 rounded-xl shadow-lg">
-                  <Heart className="text-white fill-current" size={20} />
-                </div>
-                <h1 className="text-2xl font-black tracking-tighter text-slate-900 italic">LINK<span className="text-pink-500 not-italic">Party</span></h1>
-              </div>
-              <p className="text-sm font-medium text-slate-400 leading-relaxed tracking-tight max-w-[240px] text-wrap">
-                最高の出会いと、忘れられない時間をプロデュース。LINKPartyは信頼と安心の街コンポータルです。
-              </p>
-            </div>
-            
-            <div className="space-y-6 text-wrap text-wrap">
-              <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.3em]">Quick Links</h4>
-              <ul className="space-y-3 text-sm font-bold text-slate-500 text-wrap">
-                <li className="hover:text-pink-500 cursor-pointer transition-colors" onClick={() => changeView('list')}>イベント一覧</li>
-                <li className="hover:text-pink-500 cursor-pointer transition-colors" onClick={() => changeView('guide')}>ご利用ガイド</li>
-                <li className="hover:text-pink-500 cursor-pointer transition-colors" onClick={() => changeView('faq')}>よくあるご質問</li>
-              </ul>
-            </div>
-
-            <div className="space-y-6 text-wrap">
-              <h4 className="text-xs font-black text-slate-900 uppercase tracking-[0.3em]">Contact Us</h4>
-              <ul className="space-y-4 flex flex-col items-center md:items-start text-wrap">
-                <li className="flex items-center gap-3">
-                  <Phone size={16} className="text-pink-500" />
-                  <a href={`tel:${contactInfo.phone}`} className="text-sm font-black text-slate-700 hover:text-pink-500 transition-colors">{contactInfo.phone}</a>
-                </li>
-                <li className="flex items-center gap-3">
-                  <Mail size={16} className="text-pink-500" />
-                  <a href={`mailto:${contactInfo.email}`} className="text-sm font-black text-slate-700 hover:text-pink-500 transition-colors">{contactInfo.email}</a>
-                </li>
-              </ul>
-            </div>
+      <footer className="bg-white border-t border-slate-100 pt-20 pb-10 mt-20">
+        <div className="max-w-6xl mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-12 text-center md:text-left">
+          <div className="space-y-6 flex flex-col items-center md:items-start">
+            <h1 className="text-2xl font-black tracking-tighter italic">LINK<span className="text-pink-500 not-italic">Party</span></h1>
+            <p className="text-sm font-medium text-slate-400 max-w-[240px]">信頼と安心の街コンポータル。最高の出会いをお届けします。</p>
           </div>
-
-          <div className="flex flex-col md:flex-row items-center justify-between gap-10 pt-10 border-t border-slate-50 text-wrap">
-            <p className="text-[10px] font-black tracking-[0.4em] text-slate-300 uppercase text-wrap">© 2026 LINKParty Japan Group . All Rights Reserved.</p>
-            <div className="flex gap-8 text-[10px] font-black text-slate-400 uppercase tracking-widest text-wrap">
-              <span className="hover:text-pink-500 cursor-pointer transition-colors">Terms of Service</span>
-              <span className="hover:text-pink-500 cursor-pointer transition-colors">Privacy Policy</span>
+          <div className="space-y-6">
+            <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Links</h4>
+            <ul className="space-y-3 text-sm font-bold text-slate-500">
+              <li className="hover:text-pink-500 cursor-pointer" onClick={() => setView('guide')}>ご利用ガイド</li>
+              <li className="hover:text-pink-500 cursor-pointer" onClick={() => setView('faq')}>よくあるご質問</li>
+            </ul>
+          </div>
+          <div className="space-y-6">
+            <h4 className="text-xs font-black uppercase tracking-widest text-slate-900">Contact</h4>
+            <div className="text-sm font-bold text-slate-600 space-y-2">
+              <p className="flex items-center justify-center md:justify-start gap-2"><Phone size={14} className="text-pink-500"/> {contactInfo.phone}</p>
+              <p className="flex items-center justify-center md:justify-start gap-2"><Mail size={14} className="text-pink-500"/> {contactInfo.email}</p>
             </div>
           </div>
         </div>
